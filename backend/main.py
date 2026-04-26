@@ -53,6 +53,50 @@ def _ffmpeg_location() -> str | None:
 
 FFMPEG_LOCATION = _ffmpeg_location()
 
+# YouTube increasingly requires a "Sign in to confirm you're not a bot" check
+# on requests from datacenter IPs (e.g. Fly.io). Different yt-dlp player
+# clients have different triggers for this gate: the iOS / Android / mweb /
+# tv clients often succeed where the default "web" client is blocked. We ask
+# yt-dlp to try them in order and fall back on failure.
+YT_PLAYER_CLIENTS = ["ios", "mweb", "android", "tv", "web_safari", "web"]
+YT_EXTRACTOR_ARGS = {"youtube": {"player_client": YT_PLAYER_CLIENTS}}
+
+# Messages yt-dlp emits when the anti-bot gate is active. Used to decide
+# whether to retry with a different player client.
+_BOT_CHECK_MARKERS = (
+    "confirm you're not a bot",
+    "confirm you are not a bot",
+    "Sign in to confirm",
+    "requires login",
+)
+
+
+def _is_bot_check_error(exc: Exception) -> bool:
+    message = str(exc)
+    return any(marker.lower() in message.lower() for marker in _BOT_CHECK_MARKERS)
+
+
+def _run_with_client_fallback(runner):
+    """Call ``runner(opts)`` trying each player client until one succeeds.
+
+    ``runner`` takes a partial ydl options dict (just the extractor_args
+    override) and returns whatever it wants. If a call raises a
+    ``DownloadError`` that looks like the bot-check gate, we retry with the
+    next client. Any other error is re-raised immediately.
+    """
+    last_exc: Exception | None = None
+    for client in YT_PLAYER_CLIENTS:
+        try:
+            return runner({"youtube": {"player_client": [client]}})
+        except DownloadError as exc:
+            last_exc = exc
+            if _is_bot_check_error(exc):
+                continue
+            raise
+    assert last_exc is not None
+    raise last_exc
+
+
 app = FastAPI(title="YT Gallery Downloader", version="1.0.0")
 
 app.add_middleware(
@@ -111,17 +155,22 @@ def _unique_heights(formats: Iterable[dict[str, Any]]) -> list[str]:
 
 
 def _extract_info(url: str) -> dict[str, Any]:
-    opts: dict[str, Any] = {
+    base_opts: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
     }
     if FFMPEG_LOCATION:
-        opts["ffmpeg_location"] = FFMPEG_LOCATION
-    try:
+        base_opts["ffmpeg_location"] = FFMPEG_LOCATION
+
+    def _run(extractor_args: dict[str, Any]) -> dict[str, Any] | None:
+        opts = {**base_opts, "extractor_args": extractor_args}
         with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            return ydl.extract_info(url, download=False)
+
+    try:
+        info = _run_with_client_fallback(_run)
     except DownloadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if info is None:
@@ -200,10 +249,14 @@ def _download(url: str, fmt: str, quality: str | None, workdir: Path) -> Path:
     if FFMPEG_LOCATION:
         ydl_opts["ffmpeg_location"] = FFMPEG_LOCATION
 
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
+    def _run(extractor_args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        opts = {**ydl_opts, "extractor_args": extractor_args}
+        with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            return info, ydl.prepare_filename(info)
+
+    try:
+        info, filename = _run_with_client_fallback(_run)
     except DownloadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
