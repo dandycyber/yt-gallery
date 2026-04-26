@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f0f10" />
+    <title>YT Gallery · Download YouTube videos & shorts</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%23ff2d55'/%3E%3Cpolygon points='26,20 46,32 26,44' fill='white'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="44" height="44">
+            <rect rx="14" width="64" height="64" fill="#ff2d55" />
+            <polygon points="26,20 46,32 26,44" fill="white" />
+          </svg>
+        </div>
+        <h1>YT Gallery</h1>
+        <p class="tagline">
+          Paste a YouTube video or Shorts link and save it straight to your
+          gallery.
+        </p>
+      </header>
+
+      <section class="card" aria-label="Downloader">
+        <form id="urlForm" autocomplete="off">
+          <label for="urlInput" class="sr-only">YouTube URL</label>
+          <div class="input-row">
+            <input
+              id="urlInput"
+              name="url"
+              type="url"
+              inputmode="url"
+              placeholder="https://youtube.com/watch?v=… or /shorts/…"
+              required
+            />
+            <button id="fetchBtn" type="submit">Fetch</button>
+          </div>
+          <p class="hint">
+            Works with regular videos, Shorts, and <code>youtu.be</code> links.
+          </p>
+        </form>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <article id="preview" class="preview" hidden>
+          <img id="thumb" alt="" />
+          <div class="meta">
+            <h2 id="title"></h2>
+            <p id="channel" class="channel"></p>
+            <p id="duration" class="duration"></p>
+
+            <div class="controls">
+              <div class="control">
+                <label for="formatSelect">Format</label>
+                <select id="formatSelect">
+                  <option value="video">Video (MP4)</option>
+                  <option value="audio">Audio only (MP3)</option>
+                </select>
+              </div>
+              <div class="control" id="qualityControl">
+                <label for="qualitySelect">Quality</label>
+                <select id="qualitySelect"></select>
+              </div>
+            </div>
+
+            <button id="downloadBtn" class="primary" type="button">
+              <span class="btn-label">Download</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+            <p class="save-hint">
+              On mobile the file will save to your Downloads / Gallery folder.
+            </p>
+          </div>
+        </article>
+      </section>
+
+      <footer class="foot">
+        <p>
+          Built for personal use. Only download content you own or have
+          permission to download.
+        </p>
+      </footer>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
