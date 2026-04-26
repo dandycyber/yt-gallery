@@ -58,22 +58,23 @@ FFMPEG_LOCATION = _ffmpeg_location()
 # clients have different triggers for this gate: the iOS / Android / mweb /
 # tv clients often succeed where the default "web" client is blocked. We ask
 # yt-dlp to try them in order and fall back on failure.
-YT_PLAYER_CLIENTS = ["ios", "mweb", "android", "tv", "web_safari", "web"]
+YT_PLAYER_CLIENTS = ["tv_embedded", "tv", "mweb", "ios", "web_safari", "web"]
 YT_EXTRACTOR_ARGS = {"youtube": {"player_client": YT_PLAYER_CLIENTS}}
 
 # Messages yt-dlp emits when the anti-bot gate is active. Used to decide
 # whether to retry with a different player client.
 _BOT_CHECK_MARKERS = (
-    "confirm you're not a bot",
-    "confirm you are not a bot",
-    "Sign in to confirm",
+    "not a bot",
+    "sign in to confirm",
     "requires login",
+    "login required",
+    "cookies-from-browser",
 )
 
 
 def _is_bot_check_error(exc: Exception) -> bool:
-    message = str(exc)
-    return any(marker.lower() in message.lower() for marker in _BOT_CHECK_MARKERS)
+    message = str(exc).lower()
+    return any(marker in message for marker in _BOT_CHECK_MARKERS)
 
 
 def _run_with_client_fallback(runner):
@@ -230,13 +231,24 @@ def _download(url: str, fmt: str, quality: str | None, workdir: Path) -> Path:
     else:
         if quality and quality.endswith("p") and quality[:-1].isdigit():
             height = int(quality[:-1])
+            # Try mp4+m4a first (cleanest merge), then broader fallbacks so
+            # we still succeed with clients that only expose e.g. webm/vp9.
             fmt_selector = (
                 f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/"
+                f"bestvideo[height<={height}]+bestaudio/"
                 f"best[height<={height}][ext=mp4]/"
-                f"bestvideo[height<={height}]+bestaudio/best[height<={height}]"
+                f"best[height<={height}]/"
+                f"bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+                f"bestvideo+bestaudio/"
+                f"best"
             )
         else:
-            fmt_selector = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+            fmt_selector = (
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+                "bestvideo+bestaudio/"
+                "best[ext=mp4]/"
+                "best"
+            )
         ydl_opts = {
             "format": fmt_selector,
             "outtmpl": outtmpl,
