@@ -1,0 +1,21 @@
+[project]
+name = "yt-gallery-backend"
+version = "0.1.0"
+description = "Backend API for downloading YouTube videos/shorts"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "yt-dlp>=2025.1.15",
+    "pydantic>=2.0",
+    # Bundled static ffmpeg binary so we don't rely on the container
+    # having ffmpeg pre-installed (Fly auto-generated image does not).
+    "imageio-ffmpeg>=0.4.9",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
