@@ -53,6 +53,35 @@ def _ffmpeg_location() -> str | None:
 
 FFMPEG_LOCATION = _ffmpeg_location()
 
+
+def _cookie_file() -> str | None:
+    """Return a path to a Netscape-format cookies file if configured.
+
+    YouTube increasingly gates downloads behind a "Sign in to confirm you're
+    not a bot" check. The only reliable bypass is to supply cookies from a
+    logged-in browser session. The caller can provide cookies two ways:
+
+    * ``YTDLP_COOKIES_FILE`` — path to a cookies.txt already on disk.
+    * ``YTDLP_COOKIES_TXT``  — the full file contents as a single env var
+      (materialised to a temp file at startup so yt-dlp can read it).
+    """
+    explicit = os.environ.get("YTDLP_COOKIES_FILE")
+    if explicit and os.path.exists(explicit):
+        return explicit
+    inline = os.environ.get("YTDLP_COOKIES_TXT")
+    if inline and inline.strip():
+        dst = Path(tempfile.gettempdir()) / "yt_gallery_cookies.txt"
+        dst.write_text(inline, encoding="utf-8")
+        try:
+            os.chmod(dst, 0o600)
+        except OSError:  # pragma: no cover - best effort
+            pass
+        return str(dst)
+    return None
+
+
+COOKIE_FILE = _cookie_file()
+
 # YouTube increasingly requires a "Sign in to confirm you're not a bot" check
 # on requests from datacenter IPs (e.g. Fly.io). Different yt-dlp player
 # clients have different triggers for this gate: the iOS / Android / mweb /
@@ -164,6 +193,8 @@ def _extract_info(url: str) -> dict[str, Any]:
     }
     if FFMPEG_LOCATION:
         base_opts["ffmpeg_location"] = FFMPEG_LOCATION
+    if COOKIE_FILE:
+        base_opts["cookiefile"] = COOKIE_FILE
 
     def _run(extractor_args: dict[str, Any]) -> dict[str, Any] | None:
         opts = {**base_opts, "extractor_args": extractor_args}
@@ -173,6 +204,16 @@ def _extract_info(url: str) -> dict[str, Any]:
     try:
         info = _run_with_client_fallback(_run)
     except DownloadError as exc:
+        if _is_bot_check_error(exc):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "YouTube is rate-limiting this server and asked to 'sign in "
+                    "to confirm you're not a bot' for this video. The server "
+                    "admin needs to set YTDLP_COOKIES_TXT (a Netscape-format "
+                    "cookies file exported from a logged-in YouTube session)."
+                ),
+            ) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if info is None:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -260,6 +301,8 @@ def _download(url: str, fmt: str, quality: str | None, workdir: Path) -> Path:
 
     if FFMPEG_LOCATION:
         ydl_opts["ffmpeg_location"] = FFMPEG_LOCATION
+    if COOKIE_FILE:
+        ydl_opts["cookiefile"] = COOKIE_FILE
 
     def _run(extractor_args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         opts = {**ydl_opts, "extractor_args": extractor_args}
@@ -270,6 +313,15 @@ def _download(url: str, fmt: str, quality: str | None, workdir: Path) -> Path:
     try:
         info, filename = _run_with_client_fallback(_run)
     except DownloadError as exc:
+        if _is_bot_check_error(exc):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "YouTube asked this server to 'sign in to confirm you're "
+                    "not a bot' for this video. Set YTDLP_COOKIES_TXT with a "
+                    "Netscape cookies.txt from a logged-in YouTube session."
+                ),
+            ) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     path = Path(filename)
