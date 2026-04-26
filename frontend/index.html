@@ -7,6 +7,11 @@
     <title>YT Gallery · Download YouTube videos & shorts</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%23ff2d55'/%3E%3Cpolygon points='26,20 46,32 26,44' fill='white'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./styles.css" />
+    <script>
+      // Point the static frontend at the deployed FastAPI backend.
+      // Can be overridden at runtime via `?api=<url>` query parameter.
+      window.API_BASE = "https://yt-gallery-backend-jnpxisyk.fly.dev";
+    </script>
   </head>
   <body>
     <main class="shell">

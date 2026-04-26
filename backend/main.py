@@ -34,6 +34,25 @@ from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+
+def _ffmpeg_location() -> str | None:
+    """Return a path to an ffmpeg binary if one is available.
+
+    Falls back to the static binary shipped with ``imageio-ffmpeg`` so the
+    service works in minimal containers that don't have ``ffmpeg`` on PATH.
+    """
+    if shutil.which("ffmpeg"):
+        return None  # yt-dlp will discover it on PATH
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # pragma: no cover - best effort
+        return None
+
+
+FFMPEG_LOCATION = _ffmpeg_location()
+
 app = FastAPI(title="YT Gallery Downloader", version="1.0.0")
 
 app.add_middleware(
@@ -92,12 +111,14 @@ def _unique_heights(formats: Iterable[dict[str, Any]]) -> list[str]:
 
 
 def _extract_info(url: str) -> dict[str, Any]:
-    opts = {
+    opts: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
     }
+    if FFMPEG_LOCATION:
+        opts["ffmpeg_location"] = FFMPEG_LOCATION
     try:
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -175,6 +196,9 @@ def _download(url: str, fmt: str, quality: str | None, workdir: Path) -> Path:
             "noplaylist": True,
             "merge_output_format": "mp4",
         }
+
+    if FFMPEG_LOCATION:
+        ydl_opts["ffmpeg_location"] = FFMPEG_LOCATION
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
